@@ -1,0 +1,19 @@
+[package]
+name = "giter-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Desktop application for giter - a git repository analysis tool"
+
+[[bin]]
+name = "giter-app"
+path = "src/main.rs"
+
+[dependencies]
+eframe = "0.27"
+egui = "0.27"
+egui_plot = "0.27"
+giter-core = { path = "../giter-core" }
+rfd = "0.14"

@@ -1,0 +1,6 @@
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link"
+rustflags = ["-C", "link-arg=/NOLOGO"]
+
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-args=-ladvapi32 -lole32 -lws2_32 -luserenv -lntdll"]
