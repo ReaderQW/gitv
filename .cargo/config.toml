@@ -1,6 +1,6 @@
 [target.x86_64-pc-windows-msvc]
 linker = "lld-link"
-rustflags = ["-C", "link-arg=/NOLOGO"]
+rustflags = ["-C", "link-arg=/NOLOGO", "-C", "link-arg=/DEFAULTLIB:advapi32", "-C", "link-arg=/DEFAULTLIB:ole32", "-C", "link-arg=/DEFAULTLIB:ws2_32", "-C", "link-arg=/DEFAULTLIB:userenv", "-C", "link-arg=/DEFAULTLIB:ntdll", "-C", "link-arg=/DEFAULTLIB:bcrypt", "-C", "link-arg=/DEFAULTLIB:crypt32", "-C", "link-arg=/DEFAULTLIB:secur32"]
 
 [target.x86_64-pc-windows-gnu]
 rustflags = ["-C", "link-args=-ladvapi32 -lole32 -lws2_32 -luserenv -lntdll"]

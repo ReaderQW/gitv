@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use chrono::{TimeZone, Utc};
+
 use crate::error::CoreResult;
 use crate::model::ChangeRecord;
 
@@ -17,6 +19,11 @@ pub fn scan_changes(
     let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)?;
 
     let commit_hash = commit.id().to_string();
+    let commit_time = commit.time();
+    let datetime = Utc
+        .timestamp_opt(commit_time.seconds(), 0)
+        .single()
+        .unwrap_or_else(Utc::now);
     let mut changes = Vec::new();
 
     for (i, delta) in diff.deltas().enumerate() {
@@ -61,6 +68,7 @@ pub fn scan_changes(
             ext,
             insertions,
             deletions,
+            datetime,
         });
     }
 
