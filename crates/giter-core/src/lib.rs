@@ -1,5 +1,6 @@
 pub mod analysis;
 pub mod error;
+pub mod export;
 pub mod git;
 pub mod model;
 
