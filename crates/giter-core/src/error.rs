@@ -12,8 +12,14 @@ pub enum CoreError {
     #[error("Not a git repository: {0}")]
     NotAGitRepository(PathBuf),
 
-    #[error("JSON error: {0}")]
+    #[error("JSON serialization error: {0}")]
     Serde(#[from] serde_json::Error),
+
+    #[error("CSV error: {0}")]
+    Csv(#[from] csv::Error),
+
+    #[error("Invalid date: year={0} month={1}")]
+    InvalidDate(i32, u32),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
