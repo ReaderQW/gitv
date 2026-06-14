@@ -1,5 +1,6 @@
 use chrono::{Datelike, NaiveDate};
 
+use crate::error::{CoreError, CoreResult};
 use crate::model::CommitRecord;
 
 /// Group commits by day, returning sorted (date, count) pairs.
@@ -25,7 +26,7 @@ pub fn commit_trend_by_week(commits: &[CommitRecord]) -> Vec<(NaiveDate, usize)>
 }
 
 /// Group commits by month, returning sorted (first_of_month, count) pairs.
-pub fn commit_trend_by_month(commits: &[CommitRecord]) -> Vec<(NaiveDate, usize)> {
+pub fn commit_trend_by_month(commits: &[CommitRecord]) -> CoreResult<Vec<(NaiveDate, usize)>> {
     let mut counts: std::collections::BTreeMap<(i32, u32), usize> = std::collections::BTreeMap::new();
     for commit in commits {
         let date = commit.datetime.date_naive();
@@ -33,7 +34,11 @@ pub fn commit_trend_by_month(commits: &[CommitRecord]) -> Vec<(NaiveDate, usize)
     }
     counts
         .into_iter()
-        .map(|((y, m), c)| (NaiveDate::from_ymd_opt(y, m, 1).unwrap(), c))
+        .map(|((y, m), c)| {
+            NaiveDate::from_ymd_opt(y, m, 1)
+                .map(|d| (d, c))
+                .ok_or(CoreError::InvalidDate(y, m))
+        })
         .collect()
 }
 
@@ -103,14 +108,14 @@ mod tests {
 
     #[test]
     fn test_trend_by_month_empty() {
-        let result = commit_trend_by_month(&[]);
+        let result = commit_trend_by_month(&[]).expect("empty trend");
         assert!(result.is_empty());
     }
 
     #[test]
     fn test_trend_by_month_groups() {
         let commits = vec![make_commit(0, "a"), make_commit(32, "b")]; // ~1 month apart
-        let result = commit_trend_by_month(&commits);
+        let result = commit_trend_by_month(&commits).expect("month trend");
         assert!(result.len() >= 1);
         // each entry should be the 1st of some month
         for (date, _) in &result {
