@@ -44,6 +44,7 @@ mod tests {
                 author_name: "Alice".into(),
                 author_email: "alice@example.com".into(),
                 datetime: Utc::now(),
+                message: "Initial commit".into(),
             },
         ];
         to_file(&data, &path).expect("export JSON");

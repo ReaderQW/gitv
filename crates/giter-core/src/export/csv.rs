@@ -35,6 +35,7 @@ mod tests {
                 author_name: "Alice".into(),
                 author_email: "alice@example.com".into(),
                 datetime: Utc::now(),
+                message: "First commit".into(),
             },
             CommitRecord {
                 repo_name: "test".into(),
@@ -42,6 +43,7 @@ mod tests {
                 author_name: "Bob".into(),
                 author_email: "bob@example.com".into(),
                 datetime: Utc::now(),
+                message: "Second commit".into(),
             },
         ]
     }

@@ -41,6 +41,7 @@ mod tests {
             author_name: name.into(),
             author_email: email.into(),
             datetime: Utc::now(),
+            message: "commit".into(),
         }
     }
 

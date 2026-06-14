@@ -57,6 +57,7 @@ mod tests {
             author_name: author.into(),
             author_email: "a@b.com".into(),
             datetime,
+            message: "commit".into(),
         }
     }
 

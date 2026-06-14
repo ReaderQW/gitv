@@ -8,4 +8,5 @@ pub struct CommitRecord {
     pub author_name: String,
     pub author_email: String,
     pub datetime: DateTime<Utc>,
+    pub message: String,
 }

@@ -34,6 +34,7 @@ pub fn scan_commits(repo_path: &Path) -> CoreResult<Vec<CommitRecord>> {
             author_name: author.name().unwrap_or("unknown").to_string(),
             author_email: author.email().unwrap_or("unknown").to_string(),
             datetime,
+            message: commit.message().unwrap_or("").to_string(),
         });
     }
 
@@ -131,6 +132,10 @@ mod tests {
             assert_eq!(commit.author_name, "Test User");
             assert_eq!(commit.author_email, "test@example.com");
             assert_eq!(commit.repo_name, "test_repo");
+            assert!(
+                !commit.message.is_empty(),
+                "Commit message should not be empty"
+            );
         }
     }
 
