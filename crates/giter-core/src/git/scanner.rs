@@ -5,6 +5,7 @@ use git2::Repository;
 use crate::error::{CoreError, CoreResult};
 use crate::git::change::scan_changes;
 use crate::git::commit::scan_commits;
+use crate::git::snapshot::scan_snapshot;
 use crate::model::RepoRawData;
 
 pub fn scan_repository(repo_path: &Path) -> CoreResult<RepoRawData> {
@@ -31,10 +32,14 @@ pub fn scan_repository(repo_path: &Path) -> CoreResult<RepoRawData> {
         all_changes.extend(changes);
     }
 
+    // Snapshot the HEAD tree for language distribution analysis
+    let snapshots = scan_snapshot(&repo).unwrap_or_default();
+
     Ok(RepoRawData {
         repo_name,
         commits,
         changes: all_changes,
+        snapshots,
     })
 }
 

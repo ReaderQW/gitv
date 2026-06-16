@@ -14,9 +14,34 @@
       <button id="btn-open" class="btn primary">+ 打开仓库</button>
       <button id="btn-scan-all" class="btn">全部扫描</button>
       <button id="btn-scan-selected" class="btn">扫描选中</button>
+      <span style="flex:1;"></span>
+      <button id="btn-export-csv" class="btn">导出 CSV</button>
+      <button id="btn-export-json" class="btn">导出 JSON</button>
+	      <button id="btn-settings" class="btn btn-icon" title="设置">⚙</button>
     </div>
     <span id="status-bar">就绪</span>
   </header>
+
+  <!-- Settings overlay -->
+  <div id="settings-overlay" class="overlay" style="display:none;">
+    <div class="modal">
+      <h3>设置</h3>
+      <div class="settings-form">
+        <label>
+          <span>最大最近仓库数</span>
+          <input type="number" id="settings-max-recent" min="1" max="50" value="10">
+        </label>
+        <div class="settings-info-row">
+          <span>已保存仓库数</span>
+          <span id="settings-repo-count">0</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-settings-save" class="btn primary">保存</button>
+        <button id="btn-settings-cancel" class="btn">取消</button>
+      </div>
+    </div>
+  </div>
 
   <div id="app-layout">
     <!-- Left sidebar: repo list -->
@@ -64,13 +89,22 @@
             <button class="tab" data-panel="contributors">贡献者</button>
             <button class="tab" data-panel="languages">语言分布</button>
             <button class="tab" data-panel="trends">趋势</button>
+            <button class="tab" data-panel="branches">分支</button>
           </div>
 
           <!-- 提交记录 -->
           <div class="tab-panel active" id="panel-commits">
+            <div style="margin-bottom:8px;">
+              <input id="commit-search" type="text" placeholder="搜索提交信息、作者、哈希…" class="search-input">
+            </div>
             <table id="commits-table">
               <thead>
-                <tr><th>哈希</th><th>作者</th><th>日期</th><th>提交信息</th></tr>
+                <tr>
+                  <th class="sortable" data-key="hash">哈希</th>
+                  <th class="sortable" data-key="author_name">作者</th>
+                  <th class="sortable" data-key="datetime">日期</th>
+                  <th class="sortable" data-key="message">提交信息</th>
+                </tr>
               </thead>
               <tbody id="commits-body"></tbody>
             </table>
@@ -80,7 +114,13 @@
           <div class="tab-panel" id="panel-changes">
             <div class="table-wrap">
               <table>
-                <thead><tr><th>文件路径</th><th>类型</th><th>新增</th><th>删除</th><th>提交哈希</th></tr></thead>
+                <thead><tr>
+                  <th class="sortable" data-key="file_path">文件路径</th>
+                  <th class="sortable" data-key="ext">类型</th>
+                  <th class="sortable" data-key="insertions">新增</th>
+                  <th class="sortable" data-key="deletions">删除</th>
+                  <th class="sortable" data-key="commit_hash">提交哈希</th>
+                </tr></thead>
                 <tbody id="changes-body"></tbody>
               </table>
             </div>
@@ -93,6 +133,9 @@
 
           <!-- 语言分布 -->
           <div class="tab-panel" id="panel-languages">
+            <div style="margin-bottom:8px;">
+              <button id="btn-toggle-lang" class="btn chart-type-btn">切换为饼图</button>
+            </div>
             <div id="languages-chart" class="bar-chart"></div>
           </div>
 
@@ -104,7 +147,17 @@
               <button class="trend-btn" data-mode="month">按月</button>
               <button class="trend-btn" data-mode="churn">代码流失</button>
             </div>
+            <div id="trend-chart-type-bar" style="margin-bottom:8px;">
+              <button class="btn chart-type-btn active" data-trend-type="bar">柱状图</button>
+              <button class="btn chart-type-btn" data-trend-type="line">折线图</button>
+              <button class="btn chart-type-btn" data-trend-type="curve">曲线图</button>
+            </div>
             <div id="trend-chart"></div>
+          </div>
+
+          <!-- 分支信息 -->
+          <div class="tab-panel" id="panel-branches">
+            <div id="branches-list"></div>
           </div>
         </div>
       </div>

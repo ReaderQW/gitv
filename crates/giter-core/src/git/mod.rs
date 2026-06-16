@@ -1,6 +1,7 @@
 pub mod change;
 pub mod commit;
 pub mod scanner;
+pub mod snapshot;
 
 use crate::error::CoreResult;
 use chrono::{DateTime, FixedOffset, Utc};

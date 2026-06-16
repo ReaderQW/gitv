@@ -131,6 +131,79 @@ fn get_trends(
     }
 }
 
+/// Export scan data to CSV files (commits.csv + changes.csv).
+#[tauri::command]
+fn export_csv(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> Result<String, String> {
+    use std::path::PathBuf;
+    let store = store.lock().map_err(|e| e.to_string())?;
+    match store.get(std::path::Path::new(&path)) {
+        ScanState::Completed(stats) => {
+            let save_path = rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .set_file_name(format!("{}-commits.csv", stats.repo_name))
+                .save_file()
+                .ok_or("用户取消了保存")?;
+            // Write commits
+            giter_core::export::csv::to_file(&stats.commits, &save_path)
+                .map_err(|e| e.to_string())?;
+            // Write changes alongside
+            let changes_path = save_path
+                .parent()
+                .map(|p| p.join(format!("{}-changes.csv", stats.repo_name)))
+                .unwrap_or_else(|| {
+                    let mut p = PathBuf::from(&save_path);
+                    p.set_file_name(format!("{}-changes.csv", stats.repo_name));
+                    p
+                });
+            giter_core::export::csv::to_file(&stats.changes, &changes_path)
+                .map_err(|e| e.to_string())?;
+            Ok(format!("已导出：{} 和 {}", save_path.display(), changes_path.display()))
+        }
+        _ => Err("仓库尚未扫描".into()),
+    }
+}
+
+/// Export full scan data to a JSON file.
+#[tauri::command]
+fn export_json(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> Result<String, String> {
+    let store = store.lock().map_err(|e| e.to_string())?;
+    match store.get(std::path::Path::new(&path)) {
+        ScanState::Completed(stats) => {
+            let save_path = rfd::FileDialog::new()
+                .add_filter("JSON", &["json"])
+                .set_file_name(format!("{}-report.json", stats.repo_name))
+                .save_file()
+                .ok_or("用户取消了保存")?;
+            giter_core::export::json::to_file(&*stats, &save_path)
+                .map_err(|e| e.to_string())?;
+            Ok(format!("已导出到 {}", save_path.display()))
+        }
+        _ => Err("仓库尚未扫描".into()),
+    }
+}
+
+/// Return file type distribution from snapshot data.
+#[tauri::command]
+fn get_file_types(
+    path: String,
+    store: tauri::State<'_, Mutex<ScanResultStore>>,
+) -> Result<Vec<(String, u64)>, String> {
+    let store = store.lock().map_err(|e| e.to_string())?;
+    match store.get(std::path::Path::new(&path)) {
+        ScanState::Completed(stats) => {
+            Ok(giter_core::analysis::file_types::file_type_distribution(&stats.snapshots))
+        }
+        _ => Ok(vec![]),
+    }
+}
+
+/// Return branch list for a given repo path.
+#[tauri::command]
+fn get_branches(path: String) -> Result<Vec<giter_core::BranchInfo>, String> {
+    let repo = giter_core::git::GitRepo::open(&path).map_err(|e| e.to_string())?;
+    repo.branches().map_err(|e| e.to_string())
+}
+
 /// Scan a single repository and store the result.
 #[tauri::command]
 fn scan_repo(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> Result<(), String> {
@@ -151,7 +224,7 @@ fn scan_repo(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> R
                 repo_name: data.repo_name,
                 commits: data.commits,
                 changes: data.changes,
-                snapshots: Vec::new(),
+                snapshots: data.snapshots,
             };
             s.set_state(&path, ScanState::Completed(stats));
         }
@@ -181,7 +254,11 @@ pub fn run() {
             get_scan_results,
             get_contributors,
             get_trends,
+            export_csv,
+            export_json,
             scan_repo,
+            get_branches,
+            get_file_types,
         ])
         .run(tauri::generate_context!())
         .expect("error while running giter application");

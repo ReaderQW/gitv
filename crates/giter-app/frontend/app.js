@@ -12,6 +12,17 @@ let scanResults = new Map(); // path -> { state, data? }
 let selectedPath = null;
 let settings = null;
 
+// Sort state
+let commitSort = { key: null, asc: true };
+let changeSort = { key: null, asc: true };
+
+// Filter state
+let commitFilter = '';
+
+// Chart mode
+let langChartMode = 'bar'; // 'bar' | 'pie'
+let trendChartMode = 'bar'; // 'bar' | 'line' | 'curve'
+
 // ── DOM refs ──────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 const repoListEl = $('repo-list');
@@ -47,6 +58,66 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btn = e.target.closest('.trend-btn');
     if (!btn) return;
     renderTrendMode(btn.dataset.mode);
+  });
+
+  // Trend chart type switching
+  document.getElementById('trend-chart-type-bar')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chart-type-btn');
+    if (!btn || !btn.dataset.trendType) return;
+    document.querySelectorAll('#trend-chart-type-bar .chart-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    trendChartMode = btn.dataset.trendType;
+    // Re-render current trend mode
+    const activeMode = document.querySelector('.trend-btn.active')?.dataset.mode || 'day';
+    renderTrendMode(activeMode);
+  });
+
+  // Language chart toggle
+  $('btn-toggle-lang')?.addEventListener('click', () => {
+    langChartMode = langChartMode === 'bar' ? 'pie' : 'bar';
+    $('btn-toggle-lang').textContent = langChartMode === 'pie' ? '切换为柱状图' : '切换为饼图';
+    if (selectedPath) showStats(selectedPath);
+  });
+
+  // Table header sorting (delegated)
+  document.querySelector('#panel-commits thead')?.addEventListener('click', (e) => {
+    const th = e.target.closest('.sortable');
+    if (!th) return;
+    handleSort(th.dataset.key, true);
+  });
+  document.querySelector('#panel-changes thead')?.addEventListener('click', (e) => {
+    const th = e.target.closest('.sortable');
+    if (!th) return;
+    handleSort(th.dataset.key, false);
+  });
+
+  // Export buttons
+  $('btn-export-csv')?.addEventListener('click', () => doExport('csv'));
+  $('btn-export-json')?.addEventListener('click', () => doExport('json'));
+
+  // Commit search filter
+  $('commit-search')?.addEventListener('input', (e) => {
+    commitFilter = e.target.value;
+    const result = scanResults.get(selectedPath);
+    if (result?.state === 'Completed' && result.data?.commits) {
+      renderCommits(result.data.commits);
+    }
+  });
+
+  // Settings
+  $('btn-settings')?.addEventListener('click', () => {
+    $('settings-max-recent').value = settings?.max_recent ?? 10;
+    $('settings-repo-count').textContent = settings?.recent_repos?.length ?? 0;
+    $('settings-overlay').style.display = 'flex';
+  });
+  $('btn-settings-cancel')?.addEventListener('click', () => {
+    $('settings-overlay').style.display = 'none';
+  });
+  $('btn-settings-save')?.addEventListener('click', saveSettings);
+  $('settings-overlay')?.addEventListener('click', (e) => {
+    if (e.target === $('settings-overlay')) {
+      $('settings-overlay').style.display = 'none';
+    }
   });
 
   await loadInitialState();
@@ -136,6 +207,38 @@ async function scanSelected() {
   if (selectedPath) await scanRepo(selectedPath);
 }
 
+// ── Sorting ────────────────────────────────────────────────
+function handleSort(key, isCommits) {
+  const sort = isCommits ? commitSort : changeSort;
+  if (sort.key === key) sort.asc = !sort.asc;
+  else { sort.key = key; sort.asc = true; }
+  // Re-render with current data
+  if (selectedPath) showStats(selectedPath);
+}
+
+function sortData(data, sort) {
+  if (!sort.key || !data) return data;
+  return [...data].sort((a, b) => {
+    const va = a[sort.key];
+    const vb = b[sort.key];
+    if (typeof va === 'number' && typeof vb === 'number') {
+      return sort.asc ? va - vb : vb - va;
+    }
+    const sa = String(va ?? '').toLowerCase();
+    const sb = String(vb ?? '').toLowerCase();
+    return sort.asc ? sa.localeCompare(sb) : sb.localeCompare(sa);
+  });
+}
+
+function updateSortIndicators(table, sort) {
+  table.querySelectorAll('.sortable').forEach(th => {
+    th.classList.remove('asc', 'desc');
+    if (th.dataset.key === sort.key) {
+      th.classList.add(sort.asc ? 'asc' : 'desc');
+    }
+  });
+}
+
 // ── Rendering ────────────────────────────────────────────
 function renderRepoList() {
   if (repos.length === 0) {
@@ -220,9 +323,10 @@ function showStats(path) {
     statDeletions.textContent = stats.changes?.reduce((s, c) => s + (c.deletions ?? 0), 0) ?? '—';
     renderCommits(stats.commits);
     renderChanges(stats.changes);
-    renderFileTypes(stats.changes);
     loadContributors(path);
     loadTrends(path);
+    loadBranches(path);
+    loadFileTypes(path);
   } else {
     statCommits.textContent = '—';
     statFiles.textContent = '—';
@@ -240,7 +344,23 @@ function renderCommits(commits) {
     commitsBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">未找到提交</td></tr>';
     return;
   }
-  commitsBody.innerHTML = commits.map(c => `
+  // Apply search filter
+  let filtered = commits;
+  if (commitFilter) {
+    const q = commitFilter.toLowerCase();
+    filtered = commits.filter(c =>
+      (c.message && c.message.toLowerCase().includes(q)) ||
+      (c.author_name && c.author_name.toLowerCase().includes(q)) ||
+      (c.hash && c.hash.toLowerCase().includes(q))
+    );
+    if (filtered.length === 0) {
+      commitsBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">没有匹配的提交</td></tr>';
+      return;
+    }
+  }
+  const sorted = sortData(filtered, commitSort);
+  updateSortIndicators(document.querySelector('#panel-commits thead'), commitSort);
+  commitsBody.innerHTML = sorted.map(c => `
     <tr>
       <td class="hash">${escapeHtml(c.hash?.slice(0, 8) ?? '')}</td>
       <td>${escapeHtml(c.author_name ?? '')}</td>
@@ -257,7 +377,9 @@ function renderChanges(changes) {
     body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无文件变更</td></tr>';
     return;
   }
-  body.innerHTML = changes.map(c => `
+  const sorted = sortData(changes, changeSort);
+  updateSortIndicators(document.querySelector('#panel-changes thead'), changeSort);
+  body.innerHTML = sorted.map(c => `
     <tr>
       <td class="file-path" title="${escapeHtml(c.file_path ?? '')}">${escapeHtml(c.file_path ?? '')}</td>
       <td><span class="ext-badge">${escapeHtml(c.ext ?? '')}</span></td>
@@ -292,23 +414,72 @@ function renderContributors(container, data) {
   `).join('');
 }
 
-// ── File type distribution (computed on frontend) ────────
-function renderFileTypes(changes) {
+// ── Branch display ─────────────────────────────────────────
+async function loadBranches(path) {
+  const list = $('branches-list');
+  try {
+    const data = await cmd('get_branches', { path });
+    renderBranches(list, data);
+  } catch (e) {
+    list.innerHTML = '<div class="branch-empty">加载分支失败：' + escapeHtml(String(e)) + '</div>';
+  }
+}
+
+function renderBranches(container, branches) {
+  if (!branches || branches.length === 0) {
+    container.innerHTML = '<div class="branch-empty">暂无分支信息</div>';
+    return;
+  }
+  const locals = branches.filter(b => !b.is_remote);
+  const remotes = branches.filter(b => b.is_remote);
+
+  let html = '';
+  if (locals.length) {
+    html += '<div class="branch-section-title">本地分支</div>';
+    html += locals.map(b => `
+      <div class="branch-row ${b.is_head ? 'branch-current' : ''}">
+        <span class="branch-name">${escapeHtml(b.name)}</span>
+        ${b.is_head ? '<span class="branch-tag">当前</span>' : ''}
+      </div>
+    `).join('');
+  }
+  if (remotes.length) {
+    html += '<div class="branch-section-title">远程分支</div>';
+    html += remotes.map(b => `
+      <div class="branch-row">
+        <span class="branch-name">${escapeHtml(b.name)}</span>
+      </div>
+    `).join('');
+  }
+  container.innerHTML = html;
+}
+
+// ── File type distribution (from snapshot data) ────────────
+async function loadFileTypes(path) {
   const container = $('languages-chart');
-  if (!changes || changes.length === 0) {
+  try {
+    const entries = await cmd('get_file_types', { path });
+    renderFileTypes(container, entries);
+  } catch (e) {
+    container.innerHTML = '<div class="trend-empty">加载失败：' + escapeHtml(String(e)) + '</div>';
+  }
+}
+
+function renderFileTypes(container, entries) {
+  if (!entries || entries.length === 0) {
     container.innerHTML = '<div class="trend-empty">暂无文件类型数据</div>';
     return;
   }
 
-  // Count by extension
-  const counts = {};
-  for (const c of changes) {
-    const ext = (c.ext || '(无)').toLowerCase();
-    counts[ext] = (counts[ext] || 0) + 1;
+  if (langChartMode === 'pie') {
+    renderFileTypesPie(container, entries);
+  } else {
+    renderFileTypesBar(container, entries);
   }
-  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const maxCount = entries[0][1];
+}
 
+function renderFileTypesBar(container, entries) {
+  const maxCount = entries[0][1];
   container.innerHTML = entries.map(([ext, count]) => {
     const pct = (count / maxCount) * 100;
     return `
@@ -319,6 +490,48 @@ function renderFileTypes(changes) {
       </div>
     `;
   }).join('');
+}
+
+function renderFileTypesPie(container, entries) {
+  const PIE_COLORS = ['#4361ee','#43a047','#f9a825','#e53935','#7b2ff7',
+                      '#ff6b6b','#20c997','#fd7e14','#6f42c3','#e83e8c',
+                      '#17a2b8','#6610f2','#e0a800','#28a745','#dc3545'];
+  const total = entries.reduce((s, [,c]) => s + c, 0);
+  const size = 220, cx = size / 2, cy = size / 2, r = size / 2 - 10;
+
+  // Build slices
+  let startDeg = 0;
+  const slices = [];
+  entries.slice(0, 12).forEach(([ext, count], i) => {
+    const sliceDeg = (count / total) * 360;
+    const sr = ((startDeg - 90) * Math.PI) / 180;
+    const er = ((startDeg + sliceDeg - 90) * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(sr);
+    const y1 = cy + r * Math.sin(sr);
+    const x2 = cx + r * Math.cos(er);
+    const y2 = cy + r * Math.sin(er);
+    const large = sliceDeg > 180 ? 1 : 0;
+    const d = `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z`;
+    const pct = ((count / total) * 100).toFixed(1);
+    slices.push({ ext, count, pct, d, color: PIE_COLORS[i % PIE_COLORS.length] });
+    startDeg += sliceDeg;
+  });
+
+  const svg = `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+    ${slices.map(s => `<path d="${s.d}" fill="${s.color}" stroke="#fff" stroke-width="2">
+      <title>${escapeHtml(s.ext)}: ${s.count} (${s.pct}%)</title>
+    </path>`).join('')}
+  </svg>`;
+
+  const legend = slices.map(s => `
+    <div class="pie-legend-item">
+      <span class="pie-legend-dot" style="background:${s.color}"></span>
+      <span>${escapeHtml(s.ext)}</span>
+      <span class="pie-legend-value">${s.count}</span>
+    </div>
+  `).join('');
+
+  container.innerHTML = `<div class="pie-chart">${svg}<div class="pie-legend">${legend}</div></div>`;
 }
 
 // ── Trends chart (commits over time + code churn) ────────
@@ -361,11 +574,19 @@ function renderTrendMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode);
   });
 
+  if (trendChartMode === 'bar') {
+    renderTrendBars(chart, data, isChurn);
+  } else if (trendChartMode === 'line') {
+    renderTrendLine(chart, data, isChurn);
+  } else {
+    renderTrendCurve(chart, data, isChurn);
+  }
+}
+
+function renderTrendBars(chart, data, isChurn) {
   if (isChurn) {
-    // Code churn: side-by-side bars (green ins, red del)
     const maxVal = Math.max(...data.flatMap(([, ins, del]) => [ins, del]));
     const scale = maxVal > 0 ? 140 / maxVal : 1;
-
     chart.innerHTML = `
       <div style="margin-bottom:8px;font-size:13px;color:#555;">
         <span style="display:inline-block;width:12px;height:12px;background:#43a047;border-radius:2px;vertical-align:middle;margin-right:4px;"></span> 新增
@@ -388,10 +609,8 @@ function renderTrendMode(mode) {
       </div>
     `;
   } else {
-    // Commit count bar chart
     const maxCount = Math.max(...data.map(([, c]) => c), 1);
     const scale = maxCount > 0 ? 140 / maxCount : 1;
-
     chart.innerHTML = `
       <div class="trend-bars">
         ${data.map(([date, count]) => `
@@ -404,6 +623,160 @@ function renderTrendMode(mode) {
         `).join('')}
       </div>
     `;
+  }
+}
+
+function renderTrendLine(chart, data, isChurn) {
+  if (!data || data.length < 2) {
+    chart.innerHTML = '<div class="trend-empty">数据点不足，无法显示折线图</div>';
+    return;
+  }
+  const W = Math.max(data.length * 30, 300);
+  const H = 180, pad = { top: 10, bottom: 28, left: 50, right: 16 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+
+  let maxVal, points;
+  if (isChurn) {
+    maxVal = Math.max(...data.flatMap(([, ins, del]) => [ins, del])) || 1;
+    points = data.map(([date, ins, del], i) => ({
+      x: pad.left + (i / (data.length - 1)) * plotW,
+      y1: pad.top + plotH - (ins / maxVal) * plotH,
+      y2: pad.top + plotH - (del / maxVal) * plotH, date, ins, del
+    }));
+  } else {
+    maxVal = Math.max(...data.map(([, c]) => c), 1);
+    points = data.map(([date, count], i) => ({
+      x: pad.left + (i / (data.length - 1)) * plotW,
+      y: pad.top + plotH - (count / maxVal) * plotH, date, count
+    }));
+  }
+
+  const yTicks = 4;
+  const gridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
+    const y = pad.top + (plotH / yTicks) * i;
+    const v = Math.round(maxVal - (maxVal / yTicks) * i);
+    return `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="#eee" stroke-width="1"/>
+      <text x="${pad.left - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#999">${v}</text>`;
+  }).join('');
+
+  if (isChurn) {
+    const insPoints = points.map(p => `${p.x},${p.y1}`).join(' ');
+    const delPoints = points.map(p => `${p.x},${p.y2}`).join(' ');
+    chart.innerHTML = `<div class="trend-svg-wrap"><svg class="trend-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${gridLines}
+      <text x="${pad.left + 6}" y="${pad.top - 2}" font-size="11" fill="#43a047" font-weight="bold">新增</text>
+      <text x="${pad.left + 50}" y="${pad.top - 2}" font-size="11" fill="#e53935" font-weight="bold">删除</text>
+      <polyline points="${insPoints}" fill="none" stroke="#43a047" stroke-width="2"/>
+      <polyline points="${delPoints}" fill="none" stroke="#e53935" stroke-width="2"/>
+      ${points.map(p => `<circle cx="${p.x}" cy="${p.y1}" r="3" fill="#43a047"><title>${escapeHtml(p.date)}: +${p.ins}</title></circle>
+        <circle cx="${p.x}" cy="${p.y2}" r="3" fill="#e53935"><title>${escapeHtml(p.date)}: -${p.del}</title></circle>`).join('')}
+      ${points.map((p, i) => i % Math.ceil(data.length / 8) === 0 || i === data.length - 1
+        ? `<text x="${p.x}" y="${H - 6}" text-anchor="end" transform="rotate(-30,${p.x},${H - 6})" font-size="9" fill="#888">${escapeHtml(p.date.slice(5))}</text>`
+        : '').join('')}
+    </svg></div>`;
+  } else {
+    const pts = points.map(p => `${p.x},${p.y}`).join(' ');
+    chart.innerHTML = `<div class="trend-svg-wrap"><svg class="trend-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${gridLines}
+      <polyline points="${pts}" fill="none" stroke="#4361ee" stroke-width="2"/>
+      ${points.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#4361ee"><title>${escapeHtml(p.date)}: ${p.count} 次提交</title></circle>`).join('')}
+      ${points.map((p, i) => i % Math.ceil(data.length / 8) === 0 || i === data.length - 1
+        ? `<text x="${p.x}" y="${H - 6}" text-anchor="end" transform="rotate(-30,${p.x},${H - 6})" font-size="9" fill="#888">${escapeHtml(p.date.slice(5))}</text>`
+        : '').join('')}
+    </svg></div>`;
+  }
+}
+
+function renderTrendCurve(chart, data, isChurn) {
+  if (!data || data.length < 2) {
+    chart.innerHTML = '<div class="trend-empty">数据点不足，无法显示曲线图</div>';
+    return;
+  }
+  const W = Math.max(data.length * 30, 300);
+  const H = 180, pad = { top: 10, bottom: 28, left: 50, right: 16 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+
+  function smoothPath(points) {
+    if (points.length < 2) return '';
+    let d = `M${points[0].x},${points[0].y}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const mx = (points[i].x + points[i + 1].x) / 2;
+      const my = (points[i].y + points[i + 1].y) / 2;
+      d += ` Q${points[i].x},${points[i].y} ${mx},${my}`;
+    }
+    d += ` L${points[points.length - 1].x},${points[points.length - 1].y}`;
+    return d;
+  }
+
+  let maxVal, series1, series2;
+  if (isChurn) {
+    maxVal = Math.max(...data.flatMap(([, ins, del]) => [ins, del])) || 1;
+    series1 = data.map(([date, ins], i) => ({ x: pad.left + (i / (data.length - 1)) * plotW, y: pad.top + plotH - (ins / maxVal) * plotH, date, val: ins }));
+    series2 = data.map(([date, , del], i) => ({ x: pad.left + (i / (data.length - 1)) * plotW, y: pad.top + plotH - (del / maxVal) * plotH, date, val: del }));
+  } else {
+    maxVal = Math.max(...data.map(([, c]) => c), 1);
+    series1 = data.map(([date, count], i) => ({ x: pad.left + (i / (data.length - 1)) * plotW, y: pad.top + plotH - (count / maxVal) * plotH, date, val: count }));
+    series2 = null;
+  }
+
+  const yTicks = 4;
+  const gridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
+    const y = pad.top + (plotH / yTicks) * i;
+    const v = Math.round(maxVal - (maxVal / yTicks) * i);
+    return `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="#eee" stroke-width="1"/>
+      <text x="${pad.left - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#999">${v}</text>`;
+  }).join('');
+
+  const path1 = smoothPath(series1);
+  const path2 = series2 ? smoothPath(series2) : '';
+
+  if (isChurn) {
+    chart.innerHTML = `<div class="trend-svg-wrap"><svg class="trend-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${gridLines}
+      <text x="${pad.left + 6}" y="${pad.top - 2}" font-size="11" fill="#43a047" font-weight="bold">新增</text>
+      <text x="${pad.left + 50}" y="${pad.top - 2}" font-size="11" fill="#e53935" font-weight="bold">删除</text>
+      <path d="${path1}" fill="none" stroke="#43a047" stroke-width="2"/>
+      <path d="${path2}" fill="none" stroke="#e53935" stroke-width="2"/>
+      ${series1.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#43a047"><title>${escapeHtml(p.date)}: +${p.val}</title></circle>`).join('')}
+      ${series2.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#e53935"><title>${escapeHtml(p.date)}: -${p.val}</title></circle>`).join('')}
+      ${series1.map((p, i) => i % Math.ceil(data.length / 8) === 0 || i === data.length - 1
+        ? `<text x="${p.x}" y="${H - 6}" text-anchor="end" transform="rotate(-30,${p.x},${H - 6})" font-size="9" fill="#888">${escapeHtml(p.date.slice(5))}</text>`
+        : '').join('')}
+    </svg></div>`;
+  } else {
+    chart.innerHTML = `<div class="trend-svg-wrap"><svg class="trend-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${gridLines}
+      <path d="${path1}" fill="none" stroke="#4361ee" stroke-width="2"/>
+      ${series1.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#4361ee"><title>${escapeHtml(p.date)}: ${p.val} 次提交</title></circle>`).join('')}
+      ${series1.map((p, i) => i % Math.ceil(data.length / 8) === 0 || i === data.length - 1
+        ? `<text x="${p.x}" y="${H - 6}" text-anchor="end" transform="rotate(-30,${p.x},${H - 6})" font-size="9" fill="#888">${escapeHtml(p.date.slice(5))}</text>`
+        : '').join('')}
+    </svg></div>`;
+  }
+}
+
+// ── Export ──────────────────────────────────────────────────
+async function doExport(fmt) {
+  if (!selectedPath) { setStatus('请先选择一个仓库', true); return; }
+  try {
+    const msg = await cmd('export_' + fmt, { path: selectedPath });
+    setStatus(msg);
+  } catch (e) {
+    setStatus('导出失败：' + e, true);
+  }
+}
+
+// ── Settings ───────────────────────────────────────────────
+async function saveSettings() {
+  settings.max_recent = parseInt($('settings-max-recent').value) || 10;
+  try {
+    await cmd('update_settings', { newSettings: settings });
+    $('settings-overlay').style.display = 'none';
+    setStatus('设置已保存');
+  } catch (e) {
+    setStatus('保存设置失败：' + e, true);
   }
 }
 
