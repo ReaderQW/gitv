@@ -35,8 +35,6 @@
 |---|---|---|
 | ![贡献者](screenshots/contributors.png) | ![语言分布](screenshots/languages.png) | ![趋势](screenshots/trends.png) |
 
-> 截图位于 `screenshots/` 目录，运行应用后可自行截取。
-
 ## 技术栈
 
 | 层 | 技术 | 说明 |
