@@ -2,11 +2,13 @@
 
 **这是 2026 Rust程序设计实训课程大作业**
 
+在 https://github.com/chenjiandongx/gitv 的基础上进行再开发
+
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/Tauri-2.x-blue)](https://v2.tauri.app)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-green)](LICENSE)
 
-**Giter** 是一个纯 Rust 编写的本地 Git 仓库分析桌面工具，基于 **Tauri 2.x** 框架构建。支持多仓库管理、交互式数据可视化，帮助开发者快速了解仓库的提交活跃度、贡献者分布、代码语言组成和代码变动趋势。
+**Giter** 是一个纯 Rust 编写的本地 Git 仓库分析桌面工具，基于 **Tauri 2.11.2** 框架构建。支持多仓库管理、交互式数据可视化，帮助开发者快速了解仓库的提交活跃度、贡献者分布、代码语言组成和代码变动趋势。
 
 ![应用截图（待补充）](screenshot.png)
 
