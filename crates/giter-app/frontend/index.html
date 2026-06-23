@@ -31,6 +31,11 @@
           <span>最大最近仓库数</span>
           <input type="number" id="settings-max-recent" min="1" max="50" value="10">
         </label>
+        <label>
+          <span>最大扫描提交数</span>
+          <input type="number" id="settings-max-commits" min="100" max="100000" value="5000">
+          <span class="settings-hint">设为 0 扫描全部提交（大型仓库可能很慢）</span>
+        </label>
         <div class="settings-info-row">
           <span>已保存仓库数</span>
           <span id="settings-repo-count">0</span>

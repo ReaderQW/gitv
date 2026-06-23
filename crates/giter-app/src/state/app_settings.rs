@@ -8,6 +8,8 @@ pub struct AppSettings {
     pub recent_repos: Vec<PathBuf>,
     /// Maximum number of recent repos to keep.
     pub max_recent: usize,
+    /// Maximum number of commits to scan per repository (0 = unlimited).
+    pub max_commits: usize,
 }
 
 impl Default for AppSettings {
@@ -15,6 +17,7 @@ impl Default for AppSettings {
         Self {
             recent_repos: Vec::new(),
             max_recent: 10,
+            max_commits: 5000,
         }
     }
 }

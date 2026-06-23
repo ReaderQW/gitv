@@ -37,21 +37,18 @@ mod tests {
     fn test_json_export_and_read_back() {
         let dir = TempDir::new().expect("temp dir");
         let path = dir.path().join("commits.json");
-        let data = vec![
-            CommitRecord {
-                repo_name: "test".into(),
-                hash: "abc123".into(),
-                author_name: "Alice".into(),
-                author_email: "alice@example.com".into(),
-                datetime: Utc::now(),
-                message: "Initial commit".into(),
-            },
-        ];
+        let data = vec![CommitRecord {
+            repo_name: "test".into(),
+            hash: "abc123".into(),
+            author_name: "Alice".into(),
+            author_email: "alice@example.com".into(),
+            datetime: Utc::now(),
+            message: "Initial commit".into(),
+        }];
         to_file(&data, &path).expect("export JSON");
 
         let content = std::fs::read_to_string(&path).expect("read JSON");
-        let decoded: Vec<CommitRecord> =
-            serde_json::from_str(&content).expect("deserialize JSON");
+        let decoded: Vec<CommitRecord> = serde_json::from_str(&content).expect("deserialize JSON");
         assert_eq!(decoded.len(), 1);
         assert_eq!(decoded[0].author_name, "Alice");
     }

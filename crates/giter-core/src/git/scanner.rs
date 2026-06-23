@@ -8,7 +8,11 @@ use crate::git::commit::scan_commits;
 use crate::git::snapshot::scan_snapshot;
 use crate::model::RepoRawData;
 
-pub fn scan_repository(repo_path: &Path) -> CoreResult<RepoRawData> {
+pub fn scan_repository(
+    repo_path: &Path,
+    max_commits: Option<usize>,
+    on_progress: &dyn Fn(usize, usize),
+) -> CoreResult<RepoRawData> {
     let commits = scan_commits(repo_path)?;
 
     let repo = Repository::open(repo_path)
@@ -24,13 +28,29 @@ pub fn scan_repository(repo_path: &Path) -> CoreResult<RepoRawData> {
     revwalk.push_head()?;
     revwalk.set_sorting(git2::Sort::TIME)?;
 
+    let total = match max_commits {
+        Some(max) => max.min(commits.len()),
+        None => commits.len(),
+    };
+    let effective_max = max_commits.unwrap_or(usize::MAX);
+
     let mut all_changes = Vec::new();
-    for oid in revwalk {
+    for (i, oid) in revwalk.enumerate() {
+        if i >= effective_max {
+            break;
+        }
+        on_progress(i + 1, total);
         let oid = oid?;
         let commit = repo.find_commit(oid)?;
         let changes = scan_changes(&repo, &commit)?;
         all_changes.extend(changes);
     }
+
+    // Limit commits to match the changes (keep newest-first order consistent)
+    let commits = match max_commits {
+        Some(max) => commits.into_iter().take(max).collect(),
+        None => commits,
+    };
 
     // Snapshot the HEAD tree for language distribution analysis
     let snapshots = scan_snapshot(&repo).unwrap_or_default();
@@ -113,16 +133,25 @@ mod tests {
     #[test]
     fn test_scan_repository_commits_count() {
         let (_dir, repo_path) = init_test_repo();
-        let data = scan_repository(&repo_path).expect("Failed to scan repository");
+        let data =
+            scan_repository(&repo_path, None, &|_, _| {}).expect("Failed to scan repository");
 
         assert_eq!(data.repo_name, "test_repo");
         assert_eq!(data.commits.len(), 2, "Should have 2 commits");
     }
 
     #[test]
+    fn test_scan_repository_with_limit() {
+        let (_dir, repo_path) = init_test_repo();
+        let data = scan_repository(&repo_path, Some(1), &|_, _| {}).expect("Failed to scan repo");
+        assert_eq!(data.commits.len(), 1, "Should have only 1 commit");
+    }
+
+    #[test]
     fn test_scan_repository_changes_count() {
         let (_dir, repo_path) = init_test_repo();
-        let data = scan_repository(&repo_path).expect("Failed to scan repository");
+        let data =
+            scan_repository(&repo_path, None, &|_, _| {}).expect("Failed to scan repository");
 
         assert!(
             !data.changes.is_empty(),
@@ -144,7 +173,7 @@ mod tests {
     #[test]
     fn test_scan_repository_not_a_git_repo() {
         let dir = TempDir::new().expect("Failed to create temp dir");
-        let result = scan_repository(dir.path());
+        let result = scan_repository(dir.path(), None, &|_, _| {});
         assert!(result.is_err());
         match result {
             Err(CoreError::NotAGitRepository(_)) => {}

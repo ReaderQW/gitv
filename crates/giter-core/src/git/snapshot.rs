@@ -126,14 +126,12 @@ fn single_line_comment_markers(ext: &str) -> Vec<&'static str> {
     match ext {
         // C-like: // and also #
         "rs" | "go" | "zig" => vec!["//"],
-        "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "hxx" | "java" | "js"
-        | "jsx" | "mjs" | "ts" | "tsx" | "swift" | "kt" | "kts" | "scala"
-        | "dart" | "cs" => vec!["//"],
+        "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "hxx" | "java" | "js" | "jsx" | "mjs" | "ts"
+        | "tsx" | "swift" | "kt" | "kts" | "scala" | "dart" | "cs" => vec!["//"],
         // Hash-based
-        "py" | "pyw" | "rb" | "sh" | "bash" | "zsh" | "pl" | "pm" | "r"
-        | "rake" | "gemspec" | "yaml" | "yml" | "toml" | "ini" | "cfg"
-        | "conf" | "makefile" | "dockerfile" | "gitignore" | "env"
-        | "nu" | "nuspec" | "ps1" => vec!["#"],
+        "py" | "pyw" | "rb" | "sh" | "bash" | "zsh" | "pl" | "pm" | "r" | "rake" | "gemspec"
+        | "yaml" | "yml" | "toml" | "ini" | "cfg" | "conf" | "makefile" | "dockerfile"
+        | "gitignore" | "env" | "nu" | "nuspec" | "ps1" => vec!["#"],
         // SQL / Lua / Haskell
         "sql" | "lua" | "hs" | "sqlite" | "ada" => vec!["--"],
         // Lisp / Clojure
@@ -152,10 +150,10 @@ fn single_line_comment_markers(ext: &str) -> Vec<&'static str> {
 /// Return (start_marker, end_marker) for multi-line comments, or ("", "") if none.
 fn multi_line_comment_markers(ext: &str) -> (&'static str, &'static str) {
     match ext {
-        "rs" | "go" | "zig" | "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "hxx"
-        | "java" | "js" | "jsx" | "mjs" | "ts" | "tsx" | "swift" | "kt" | "kts"
-        | "scala" | "dart" | "cs" | "css" | "scss" | "sass" | "less" | "php"
-        | "php3" | "php4" | "php5" | "phtml" | "sql" | "rust" | "graphql" => ("/*", "*/"),
+        "rs" | "go" | "zig" | "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "hxx" | "java" | "js"
+        | "jsx" | "mjs" | "ts" | "tsx" | "swift" | "kt" | "kts" | "scala" | "dart" | "cs"
+        | "css" | "scss" | "sass" | "less" | "php" | "php3" | "php4" | "php5" | "phtml" | "sql"
+        | "rust" | "graphql" => ("/*", "*/"),
         "html" | "htm" | "xhtml" | "xml" | "xsd" | "xslt" | "svg" | "mdx" => ("<!--", "-->"),
         "ml" | "mli" | "mll" | "mly" => ("(*", "*)"),
         _ => ("", ""),
@@ -181,11 +179,7 @@ mod tests {
 
     #[test]
     fn test_rust_no_comments() {
-        let lines = vec![
-            "fn main() {",
-            "    println!(\"hello\");",
-            "}",
-        ];
+        let lines = vec!["fn main() {", "    println!(\"hello\");", "}"];
         let snap = make_tree_entry_snapshot(&lines, "rs");
         assert_eq!(snap.code_lines, 3);
         assert_eq!(snap.comment_lines, 0);
@@ -240,12 +234,7 @@ mod tests {
 
     #[test]
     fn test_html_comments() {
-        let lines = vec![
-            "<!--",
-            "  HTML comment block",
-            "-->",
-            "<html></html>",
-        ];
+        let lines = vec!["<!--", "  HTML comment block", "-->", "<html></html>"];
         let snap = make_tree_entry_snapshot(&lines, "html");
         assert_eq!(snap.comment_lines, 3);
         assert_eq!(snap.code_lines, 1);
@@ -288,35 +277,55 @@ mod tests {
         let sig = git2::Signature::now("Test", "test@test.com").expect("sig");
 
         // Create a Rust file
-        std::fs::write(repo_path.join("main.rs"), b"// comment\nfn main() {\n    println!(\"hi\");\n}\n").expect("write");
+        std::fs::write(
+            repo_path.join("main.rs"),
+            b"// comment\nfn main() {\n    println!(\"hi\");\n}\n",
+        )
+        .expect("write");
         // Create a Python file
-        std::fs::write(repo_path.join("lib.py"), b"# py comment\ndef foo():\n    pass\n").expect("write");
+        std::fs::write(
+            repo_path.join("lib.py"),
+            b"# py comment\ndef foo():\n    pass\n",
+        )
+        .expect("write");
         // Create an empty file
         std::fs::write(repo_path.join("empty.md"), b"").expect("write");
 
         let mut index = repo.index().expect("index");
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).expect("add all");
+        index
+            .add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+            .expect("add all");
         index.write().expect("write index");
         let tree_id = index.write_tree().expect("write tree");
         let tree = repo.find_tree(tree_id).expect("find tree");
-        repo.commit(Some("HEAD"), &sig, &sig, "Initial", &tree, &[]).expect("commit");
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial", &tree, &[])
+            .expect("commit");
 
         let snapshots = scan_snapshot(&repo).expect("scan snapshot");
         assert_eq!(snapshots.len(), 3, "should have 3 files");
 
         // Verify main.rs
-        let main_rs = snapshots.iter().find(|s| s.file_path == "main.rs").expect("main.rs");
+        let main_rs = snapshots
+            .iter()
+            .find(|s| s.file_path == "main.rs")
+            .expect("main.rs");
         assert_eq!(main_rs.comment_lines, 1);
         assert_eq!(main_rs.code_lines, 3);
 
         // Verify lib.py
-        let lib_py = snapshots.iter().find(|s| s.file_path == "lib.py").expect("lib.py");
+        let lib_py = snapshots
+            .iter()
+            .find(|s| s.file_path == "lib.py")
+            .expect("lib.py");
         assert_eq!(lib_py.comment_lines, 1);
         assert_eq!(lib_py.code_lines, 2);
         assert_eq!(lib_py.blank_lines, 0);
 
         // Verify empty.md
-        let empty_md = snapshots.iter().find(|s| s.file_path == "empty.md").expect("empty.md");
+        let empty_md = snapshots
+            .iter()
+            .find(|s| s.file_path == "empty.md")
+            .expect("empty.md");
         assert_eq!(empty_md.code_lines, 0);
         assert_eq!(empty_md.comment_lines, 0);
         assert_eq!(empty_md.blank_lines, 0);

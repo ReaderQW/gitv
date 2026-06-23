@@ -107,6 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Settings
   $('btn-settings')?.addEventListener('click', () => {
     $('settings-max-recent').value = settings?.max_recent ?? 10;
+    $('settings-max-commits').value = settings?.max_commits ?? 5000;
     $('settings-repo-count').textContent = settings?.recent_repos?.length ?? 0;
     $('settings-overlay').style.display = 'flex';
   });
@@ -119,6 +120,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       $('settings-overlay').style.display = 'none';
     }
   });
+
+  // Listen for scan progress events from backend
+  if (window.__TAURI__?.event) {
+    window.__TAURI__.event.listen('scan-progress', (event) => {
+      const { path, current, total } = event.payload;
+      // Update status bar with progress
+      setStatus(`扫描中: ${current}/${total} 个提交`);
+
+      // Update badge if this is the currently selected repo
+      if (path === selectedPath) {
+        statsState.textContent = `扫描中 ${current}/${total}`;
+      }
+    });
+  }
 
   await loadInitialState();
 });
@@ -771,6 +786,7 @@ async function doExport(fmt) {
 // ── Settings ───────────────────────────────────────────────
 async function saveSettings() {
   settings.max_recent = parseInt($('settings-max-recent').value) || 10;
+  settings.max_commits = parseInt($('settings-max-commits').value) || 5000;
   try {
     await cmd('update_settings', { newSettings: settings });
     $('settings-overlay').style.display = 'none';

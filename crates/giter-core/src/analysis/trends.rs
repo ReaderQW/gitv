@@ -5,7 +5,8 @@ use crate::model::CommitRecord;
 
 /// Group commits by day, returning sorted (date, count) pairs.
 pub fn commit_trend_by_day(commits: &[CommitRecord]) -> Vec<(NaiveDate, usize)> {
-    let mut counts: std::collections::BTreeMap<NaiveDate, usize> = std::collections::BTreeMap::new();
+    let mut counts: std::collections::BTreeMap<NaiveDate, usize> =
+        std::collections::BTreeMap::new();
     for commit in commits {
         let date = commit.datetime.date_naive();
         *counts.entry(date).or_insert(0) += 1;
@@ -15,7 +16,8 @@ pub fn commit_trend_by_day(commits: &[CommitRecord]) -> Vec<(NaiveDate, usize)> 
 
 /// Group commits by ISO week (starting Monday), returning sorted (week_start, count) pairs.
 pub fn commit_trend_by_week(commits: &[CommitRecord]) -> Vec<(NaiveDate, usize)> {
-    let mut counts: std::collections::BTreeMap<NaiveDate, usize> = std::collections::BTreeMap::new();
+    let mut counts: std::collections::BTreeMap<NaiveDate, usize> =
+        std::collections::BTreeMap::new();
     for commit in commits {
         let date = commit.datetime.date_naive();
         let dow = date.weekday().num_days_from_monday();
@@ -27,7 +29,8 @@ pub fn commit_trend_by_week(commits: &[CommitRecord]) -> Vec<(NaiveDate, usize)>
 
 /// Group commits by month, returning sorted (first_of_month, count) pairs.
 pub fn commit_trend_by_month(commits: &[CommitRecord]) -> CoreResult<Vec<(NaiveDate, usize)>> {
-    let mut counts: std::collections::BTreeMap<(i32, u32), usize> = std::collections::BTreeMap::new();
+    let mut counts: std::collections::BTreeMap<(i32, u32), usize> =
+        std::collections::BTreeMap::new();
     for commit in commits {
         let date = commit.datetime.date_naive();
         *counts.entry((date.year(), date.month())).or_insert(0) += 1;
@@ -89,7 +92,11 @@ mod tests {
 
     #[test]
     fn test_trend_by_day_different_days() {
-        let commits = vec![make_commit(0, "alice"), make_commit(1, "bob"), make_commit(2, "alice")];
+        let commits = vec![
+            make_commit(0, "alice"),
+            make_commit(1, "bob"),
+            make_commit(2, "alice"),
+        ];
         let result = commit_trend_by_day(&commits);
         assert_eq!(result.len(), 3);
         // should be sorted ascending
@@ -101,9 +108,17 @@ mod tests {
     #[test]
     fn test_trend_by_week_groups_correctly() {
         // Use large gaps to avoid flakiness from current weekday
-        let commits = vec![make_commit(0, "a"), make_commit(8, "b"), make_commit(20, "c")];
+        let commits = vec![
+            make_commit(0, "a"),
+            make_commit(8, "b"),
+            make_commit(20, "c"),
+        ];
         let result = commit_trend_by_week(&commits);
-        assert!(result.len() >= 2, "should span at least 2 weeks, got {}", result.len());
+        assert!(
+            result.len() >= 2,
+            "should span at least 2 weeks, got {}",
+            result.len()
+        );
     }
 
     #[test]

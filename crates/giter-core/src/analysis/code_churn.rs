@@ -74,7 +74,11 @@ mod tests {
 
     #[test]
     fn test_churn_sorted_by_date() {
-        let changes = vec![make_change(5, 1, 0), make_change(1, 2, 0), make_change(10, 3, 0)];
+        let changes = vec![
+            make_change(5, 1, 0),
+            make_change(1, 2, 0),
+            make_change(10, 3, 0),
+        ];
         let result = code_churn_over_time(&changes);
         for w in result.windows(2) {
             assert!(w[0].0 <= w[1].0, "dates should be sorted ascending");

@@ -45,10 +45,7 @@ impl GitRepo {
             let (branch, branch_type) = branch?;
             let name = branch.name()?.unwrap_or("unknown").to_string();
             let is_head = branch.is_head();
-            let is_remote = match branch_type {
-                git2::BranchType::Remote => true,
-                _ => false,
-            };
+            let is_remote = matches!(branch_type, git2::BranchType::Remote);
             branches.push(BranchInfo {
                 name,
                 is_head,

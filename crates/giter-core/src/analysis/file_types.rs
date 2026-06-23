@@ -66,14 +66,14 @@ mod tests {
 
     #[test]
     fn test_file_types_no_extension() {
-        let snapshots = vec![
-            make_snapshot("Makefile"),
-            make_snapshot("Dockerfile"),
-        ];
+        let snapshots = vec![make_snapshot("Makefile"), make_snapshot("Dockerfile")];
         let result = file_type_distribution(&snapshots);
         // no extension -> ""
         for (ext, _) in &result {
-            assert_eq!(ext, "", "files without extension should use empty string key");
+            assert_eq!(
+                ext, "",
+                "files without extension should use empty string key"
+            );
         }
         assert_eq!(result.iter().map(|(_, c)| c).sum::<u64>(), 2);
     }

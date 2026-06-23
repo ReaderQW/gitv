@@ -2,11 +2,20 @@
 
 mod state;
 
+use chrono::Datelike;
 use state::app_settings::AppSettings;
 use state::scan_result::{ScanResultStore, ScanState};
 use state::selected_repos::SelectedRepos;
 use std::sync::Mutex;
-use chrono::Datelike;
+use tauri::Emitter;
+
+/// Trend data: commits per day, per week, per month, and code churn.
+type TrendData = (
+    Vec<(String, usize)>,
+    Vec<(String, usize)>,
+    Vec<(String, usize)>,
+    Vec<(String, i32, i32)>,
+);
 
 // ---------------------------------------------------------------------------
 // Tauri commands
@@ -24,7 +33,10 @@ fn pick_folder() -> Option<String> {
 /// Return the persisted application settings.
 #[tauri::command]
 fn get_settings(settings: tauri::State<'_, Mutex<AppSettings>>) -> Result<AppSettings, String> {
-    settings.lock().map(|s| s.clone()).map_err(|e| e.to_string())
+    settings
+        .lock()
+        .map(|s| s.clone())
+        .map_err(|e| e.to_string())
 }
 
 /// Persist new application settings.
@@ -43,7 +55,11 @@ fn update_settings(
 #[tauri::command]
 fn get_repos(repos: tauri::State<'_, Mutex<SelectedRepos>>) -> Result<Vec<String>, String> {
     let repos = repos.lock().map_err(|e| e.to_string())?;
-    Ok(repos.all().iter().map(|p| p.to_string_lossy().to_string()).collect())
+    Ok(repos
+        .all()
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect())
 }
 
 /// Add a path to the selected-repos collection.
@@ -79,9 +95,9 @@ fn get_contributors(
 ) -> Result<Vec<(String, usize)>, String> {
     let store = store.lock().map_err(|e| e.to_string())?;
     match store.get(std::path::Path::new(&path)) {
-        ScanState::Completed(stats) => {
-            Ok(giter_core::analysis::contributors::contributor_commits(&stats.commits))
-        }
+        ScanState::Completed(stats) => Ok(giter_core::analysis::contributors::contributor_commits(
+            &stats.commits,
+        )),
         _ => Ok(vec![]),
     }
 }
@@ -91,15 +107,7 @@ fn get_contributors(
 fn get_trends(
     path: String,
     store: tauri::State<'_, Mutex<ScanResultStore>>,
-) -> Result<
-    (
-        Vec<(String, usize)>,
-        Vec<(String, usize)>,
-        Vec<(String, usize)>,
-        Vec<(String, i32, i32)>,
-    ),
-    String,
-> {
+) -> Result<TrendData, String> {
     use chrono::NaiveDate;
     fn fmt_date(d: &NaiveDate) -> String {
         format!("{}-{:02}-{:02}", d.year(), d.month(), d.day())
@@ -112,19 +120,21 @@ fn get_trends(
                 .into_iter()
                 .map(|(d, c)| (fmt_date(&d), c))
                 .collect();
-            let by_week: Vec<_> = giter_core::analysis::trends::commit_trend_by_week(&stats.commits)
-                .into_iter()
-                .map(|(d, c)| (fmt_date(&d), c))
-                .collect();
+            let by_week: Vec<_> =
+                giter_core::analysis::trends::commit_trend_by_week(&stats.commits)
+                    .into_iter()
+                    .map(|(d, c)| (fmt_date(&d), c))
+                    .collect();
             let by_month = giter_core::analysis::trends::commit_trend_by_month(&stats.commits)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|(d, c)| (fmt_date(&d), c))
                 .collect();
-            let churn: Vec<_> = giter_core::analysis::code_churn::code_churn_over_time(&stats.changes)
-                .into_iter()
-                .map(|(d, ins, del)| (fmt_date(&d), ins, del))
-                .collect();
+            let churn: Vec<_> =
+                giter_core::analysis::code_churn::code_churn_over_time(&stats.changes)
+                    .into_iter()
+                    .map(|(d, ins, del)| (fmt_date(&d), ins, del))
+                    .collect();
             Ok((by_day, by_week, by_month, churn))
         }
         _ => Ok((vec![], vec![], vec![], vec![])),
@@ -133,7 +143,10 @@ fn get_trends(
 
 /// Export scan data to CSV files (commits.csv + changes.csv).
 #[tauri::command]
-fn export_csv(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> Result<String, String> {
+fn export_csv(
+    path: String,
+    store: tauri::State<'_, Mutex<ScanResultStore>>,
+) -> Result<String, String> {
     use std::path::PathBuf;
     let store = store.lock().map_err(|e| e.to_string())?;
     match store.get(std::path::Path::new(&path)) {
@@ -157,7 +170,11 @@ fn export_csv(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> 
                 });
             giter_core::export::csv::to_file(&stats.changes, &changes_path)
                 .map_err(|e| e.to_string())?;
-            Ok(format!("已导出：{} 和 {}", save_path.display(), changes_path.display()))
+            Ok(format!(
+                "已导出：{} 和 {}",
+                save_path.display(),
+                changes_path.display()
+            ))
         }
         _ => Err("仓库尚未扫描".into()),
     }
@@ -165,7 +182,10 @@ fn export_csv(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> 
 
 /// Export full scan data to a JSON file.
 #[tauri::command]
-fn export_json(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> Result<String, String> {
+fn export_json(
+    path: String,
+    store: tauri::State<'_, Mutex<ScanResultStore>>,
+) -> Result<String, String> {
     let store = store.lock().map_err(|e| e.to_string())?;
     match store.get(std::path::Path::new(&path)) {
         ScanState::Completed(stats) => {
@@ -174,8 +194,7 @@ fn export_json(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) ->
                 .set_file_name(format!("{}-report.json", stats.repo_name))
                 .save_file()
                 .ok_or("用户取消了保存")?;
-            giter_core::export::json::to_file(&*stats, &save_path)
-                .map_err(|e| e.to_string())?;
+            giter_core::export::json::to_file(stats, &save_path).map_err(|e| e.to_string())?;
             Ok(format!("已导出到 {}", save_path.display()))
         }
         _ => Err("仓库尚未扫描".into()),
@@ -190,9 +209,9 @@ fn get_file_types(
 ) -> Result<Vec<(String, u64)>, String> {
     let store = store.lock().map_err(|e| e.to_string())?;
     match store.get(std::path::Path::new(&path)) {
-        ScanState::Completed(stats) => {
-            Ok(giter_core::analysis::file_types::file_type_distribution(&stats.snapshots))
-        }
+        ScanState::Completed(stats) => Ok(
+            giter_core::analysis::file_types::file_type_distribution(&stats.snapshots),
+        ),
         _ => Ok(vec![]),
     }
 }
@@ -206,15 +225,42 @@ fn get_branches(path: String) -> Result<Vec<giter_core::BranchInfo>, String> {
 
 /// Scan a single repository and store the result.
 #[tauri::command]
-fn scan_repo(path: String, store: tauri::State<'_, Mutex<ScanResultStore>>) -> Result<(), String> {
+fn scan_repo(
+    path: String,
+    store: tauri::State<'_, Mutex<ScanResultStore>>,
+    settings: tauri::State<'_, Mutex<AppSettings>>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     // Mark as Scanning
     {
         let mut s = store.lock().map_err(|e| e.to_string())?;
         s.set_state(&path, ScanState::Scanning);
     }
 
+    // Read max_commits from settings (0 = unlimited)
+    let max_commits = {
+        let s = settings.lock().map_err(|e| e.to_string())?;
+        let mc = s.max_commits;
+        if mc > 0 {
+            Some(mc)
+        } else {
+            None
+        }
+    };
+
     let repo_path = std::path::PathBuf::from(&path);
-    let result = giter_core::git::scanner::scan_repository(&repo_path);
+    let path_for_event = path.clone();
+    let result =
+        giter_core::git::scanner::scan_repository(&repo_path, max_commits, &|current, total| {
+            let _ = app.emit(
+                "scan-progress",
+                serde_json::json!({
+                    "path": path_for_event,
+                    "current": current,
+                    "total": total,
+                }),
+            );
+        });
 
     let mut s = store.lock().map_err(|e| e.to_string())?;
     match result {

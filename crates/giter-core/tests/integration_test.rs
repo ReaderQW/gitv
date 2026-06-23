@@ -65,7 +65,7 @@ fn init_test_repo() -> (TempDir, PathBuf) {
 fn test_scan_then_export_csv_commits() {
     let (_dir, repo_path) = init_test_repo();
     let RepoRawData { commits, .. } =
-        scanner::scan_repository(&repo_path).expect("scan repository");
+        scanner::scan_repository(&repo_path, None, &|_, _| {}).expect("scan repository");
 
     let csv_path = repo_path.parent().unwrap().join("commits.csv");
     export::csv::to_file(&commits, &csv_path).expect("export commits CSV");
@@ -85,7 +85,7 @@ fn test_scan_then_export_csv_commits() {
 fn test_scan_then_export_csv_changes() {
     let (_dir, repo_path) = init_test_repo();
     let RepoRawData { changes, .. } =
-        scanner::scan_repository(&repo_path).expect("scan repository");
+        scanner::scan_repository(&repo_path, None, &|_, _| {}).expect("scan repository");
 
     let csv_path = repo_path.parent().unwrap().join("changes.csv");
     export::csv::to_file(&changes, &csv_path).expect("export changes CSV");
@@ -106,7 +106,7 @@ fn test_scan_then_export_csv_changes() {
 #[test]
 fn test_scan_then_export_json() {
     let (_dir, repo_path) = init_test_repo();
-    let raw = scanner::scan_repository(&repo_path).expect("scan repository");
+    let raw = scanner::scan_repository(&repo_path, None, &|_, _| {}).expect("scan repository");
 
     let json_path = repo_path.parent().unwrap().join("repo.json");
     export::json::to_file(&raw, &json_path).expect("export JSON");
@@ -122,33 +122,27 @@ fn test_scan_then_export_json() {
 #[test]
 fn test_scan_then_export_to_both_formats() {
     let (_dir, repo_path) = init_test_repo();
-    let raw = scanner::scan_repository(&repo_path).expect("scan repository");
+    let raw = scanner::scan_repository(&repo_path, None, &|_, _| {}).expect("scan repository");
 
     let out_dir = repo_path.parent().unwrap();
 
     // Export commits to CSV
-    export::csv::to_file(&raw.commits, &out_dir.join("commits.csv"))
-        .expect("export commits CSV");
+    export::csv::to_file(&raw.commits, &out_dir.join("commits.csv")).expect("export commits CSV");
 
     // Export changes to CSV
-    export::csv::to_file(&raw.changes, &out_dir.join("changes.csv"))
-        .expect("export changes CSV");
+    export::csv::to_file(&raw.changes, &out_dir.join("changes.csv")).expect("export changes CSV");
 
     // Export everything to JSON
-    export::json::to_file(&raw, &out_dir.join("repo.json"))
-        .expect("export repo JSON");
+    export::json::to_file(&raw, &out_dir.join("repo.json")).expect("export repo JSON");
 
     // Read back and cross-validate counts
-    let csv_commits = csv::Reader::from_path(&out_dir.join("commits.csv"))
-        .expect("open CSV");
+    let csv_commits = csv::Reader::from_path(&out_dir.join("commits.csv")).expect("open CSV");
     assert_eq!(csv_commits.into_records().count(), 2);
 
-    let csv_changes = csv::Reader::from_path(&out_dir.join("changes.csv"))
-        .expect("open CSV");
+    let csv_changes = csv::Reader::from_path(&out_dir.join("changes.csv")).expect("open CSV");
     assert!(csv_changes.into_records().count() >= 1);
 
-    let json_content = std::fs::read_to_string(&out_dir.join("repo.json"))
-        .expect("read JSON");
+    let json_content = std::fs::read_to_string(&out_dir.join("repo.json")).expect("read JSON");
     let decoded: RepoRawData = serde_json::from_str(&json_content).expect("deserialize JSON");
     assert_eq!(decoded.commits.len(), 2);
 }

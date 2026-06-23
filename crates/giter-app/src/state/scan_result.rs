@@ -156,7 +156,9 @@ mod tests {
             match (&original, &decoded) {
                 (ScanState::NotScanned, ScanState::NotScanned) => {}
                 (ScanState::Scanning, ScanState::Scanning) => {}
-                (ScanState::Completed(a), ScanState::Completed(b)) => assert_eq!(a.repo_name, b.repo_name),
+                (ScanState::Completed(a), ScanState::Completed(b)) => {
+                    assert_eq!(a.repo_name, b.repo_name)
+                }
                 (ScanState::Failed(a), ScanState::Failed(b)) => assert_eq!(a, b),
                 _ => panic!("mismatch: {:?} vs {:?}", original, decoded),
             }
